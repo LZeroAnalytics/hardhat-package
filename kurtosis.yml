@@ -1,1 +1,24 @@
 name: "github.com/LZeroAnalytics/hardhat-package"
+description: |
+  Hardhat
+  =======
+  This Kurtosis package creates a Node.js container with a Hardhat project for Ethereum smart contract development, testing, and deployment. It provides functions for running scripts, tasks, tests, and compilation.
+
+  Prerequisites
+  -------------
+  - Hardhat project either from GitHub or a local directory
+  - Node.js compatible environment
+  - Smart contracts to compile, test, or deploy
+
+  Configuration
+  -------------
+  To configure this package, you'll need to provide the following information:
+  - `project_url`: URL or local path to the Hardhat project
+  - `env_vars`: Environment variables to pass to the Hardhat container (optional)
+  - `more_files`: Additional files to mount in the container (optional)
+  
+  After deployment, you can use the following functions:
+  - `script(plan, script, network, return_keys, params)`: Runs a Hardhat script
+  - `task(plan, task_name, network, params)`: Executes a Hardhat task
+  - `test(plan, smart_contract, network)`: Runs Hardhat tests
+  - `compile(plan)`: Compiles smart contracts
