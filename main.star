@@ -25,7 +25,7 @@ def run(plan, project_url, env_vars={}, more_files={}):
     plan.exec(
         service_name = "hardhat",
         recipe = ExecRecipe(
-            command = ["/bin/sh", "-c", "cd {0} && rm -rf node_modules package-lock.json && npm cache clean --force && npm install".format(HARDHAT_PROJECT_DIR)]
+            command = ["/bin/sh", "-c", "npm install -g pnpm && cd {0} && pnpm install --shamefully-hoist".format(HARDHAT_PROJECT_DIR)]
         )
     )
 
