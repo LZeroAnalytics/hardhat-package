@@ -22,3 +22,4 @@ description: |
   - `task(plan, task_name, network, params)`: Executes a Hardhat task
   - `test(plan, smart_contract, network)`: Runs Hardhat tests
   - `compile(plan)`: Compiles smart contracts
+  - `verify(plan, contract_address, network, verification_url, constructor_args, contract_path)`: Verifies contract on blockscout

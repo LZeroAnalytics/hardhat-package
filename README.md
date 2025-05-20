@@ -86,6 +86,7 @@ def deploy_mpc_vrf_contracts(plan, private_key, rpc_url, link_token_address, lin
 | `scripts`      | Run a Hardhat script                         |
 | `task`     | Run a Hardhat task                           |
 | `test`     | Run Hardhat tests                            |
+| `verify`   | Verify contract on Blockscout                |
 | `cleanup`  | Remove the Hardhat container                 |
 
 ---
@@ -131,3 +132,51 @@ To extract return keys from your Hardhat script into Starlark, you have two opti
 
 **Summary:**
 - If you want to extract return keys, you must EITHER output only JSON, OR use separators + extraCmds. Mixing logs and JSON without separators will break extraction.
+
+## 🔍 Contract Verification
+
+The package supports automatic contract verification with Blockscout explorer. To verify a contract:
+
+```python
+# Deploy a contract first
+deployment_result = hardhat_pkg.script(
+    plan,
+    script = "scripts/deploy.js",
+    network = "bloctopus",
+    return_keys = ["contractAddress"]
+)
+
+contract_address = deployment_result["extract.contractAddress"]
+
+# Verify the deployed contract
+hardhat_pkg.verify(
+    plan,
+    contract_address = contract_address,
+    network = "bloctopus",
+    verification_url = blockscout_output["verification_url"],  # URL from blockscout package
+    constructor_args = ["0x123", "argument2", "100"],  # Optional constructor arguments
+    contract_path = "contracts/MyContract.sol:MyContract"  # Optional contract path if there are multiple contracts
+)
+```
+
+### Automatic Verification Workflow
+
+When using with the ethereum-package and blockscout-package, you can create a seamless deployment and verification workflow:
+
+```python
+# Import packages
+ethereum_pkg = import_module("github.com/LZeroAnalytics/ethereum-package/main.star")
+blockscout_pkg = import_module("github.com/LZeroAnalytics/blockscout-package/main.star")
+hardhat_pkg = import_module("github.com/LZeroAnalytics/hardhat-package/main.star")
+
+# Run Ethereum network with Blockscout
+ethereum_output = ethereum_pkg.run(plan, args)
+blockscout_url = ethereum_output["blockscout_url"]
+verification_url = ethereum_output["verification_url"]
+
+# Deploy and verify contracts
+hardhat = hardhat_pkg.init(plan, "github.com/your-org/your-contracts.git")
+hardhat_pkg.compile(plan)
+result = hardhat_pkg.script(plan, "scripts/deploy.js", "bloctopus", return_keys=["contractAddress"])
+hardhat_pkg.verify(plan, result["extract.contractAddress"], "bloctopus", verification_url)
+```

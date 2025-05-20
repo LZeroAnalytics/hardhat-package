@@ -48,6 +48,65 @@ def test(plan, smart_contract=None, network="bloctopus"):
 def compile(plan):
     return _hardhat_cmd(plan, "compile")
 
+# verify deployed contract with blockscout
+def verify(plan, contract_address, network="bloctopus", verification_url=None, constructor_args=None, contract_path=None):
+    # Prepare command options
+    cmd = ""
+    if verification_url:
+        # Create or update hardhat.config.js with etherscan configuration
+        cmd += "cat > {0}hardhat.config.js << 'EOL'\n".format(HARDHAT_PROJECT_DIR)
+        cmd += """
+require("@nomicfoundation/hardhat-verify");
+
+module.exports = {
+  // Other hardhat configs here...
+  solidity: "0.8.20",
+  networks: {
+    bloctopus: {
+      url: process.env.RPC_URL || "http://localhost:8545",
+      chainId: process.env.CHAIN_ID ? parseInt(process.env.CHAIN_ID) : 1337,
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
+    }
+  },
+  etherscan: {
+    apiKey: {
+      bloctopus: "blockscout" // API key for blockscout - doesn't matter what string is used
+    },
+    customChains: [
+      {
+        network: "bloctopus",
+        chainId: process.env.CHAIN_ID ? parseInt(process.env.CHAIN_ID) : 1337,
+        urls: {
+          apiURL: "{0}/api",
+          browserURL: "{0}"
+        }
+      }
+    ]
+  }
+};
+EOL\n""".format(verification_url)
+        cmd += " && "
+        # Install hardhat-verify plugin if needed
+        cmd += "cd {0} && npm install --save-dev @nomicfoundation/hardhat-verify && ".format(HARDHAT_PROJECT_DIR)
+    
+    # Build the verify command
+    verify_cmd = "verify"
+    if contract_path:
+        verify_cmd += " --contract {0}".format(contract_path)
+    
+    # Add the contract address
+    verify_cmd += " {0}".format(contract_address)
+    
+    # Add constructor args if provided
+    if constructor_args:
+        if isinstance(constructor_args, list):
+            verify_cmd += " " + " ".join(['"{0}"'.format(arg) for arg in constructor_args])
+        else:
+            verify_cmd += " {0}".format(constructor_args)
+    
+    # Execute the verification command
+    return _hardhat_cmd(plan, verify_cmd, network, extraCmds=None)
+
 # destroys the hardhat container; running this is optional
 def cleanup(plan):
     plan.remove_service(HARDHAT_SERVICE_NAME)
