@@ -23,3 +23,7 @@ description: |
   - `test(plan, smart_contract, network)`: Runs Hardhat tests
   - `compile(plan)`: Compiles smart contracts
   - `verify(plan, contract_address, network, verification_url, constructor_args, contract_path)`: Verifies contract on blockscout
+  - `configure_networks(plan, networks)`: Configures multiple networks for deployment
+  - `interact(plan, contract_address, function_name, network, params, return_keys)`: Interacts with a deployed contract
+  - `optimize_gas(plan, contract_path)`: Runs gas optimization tools on contracts
+  - `track_deployment(plan, contract_name, contract_address, network, constructor_args, contract_path)`: Tracks a deployed contract

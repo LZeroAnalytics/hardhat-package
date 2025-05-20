@@ -135,7 +135,7 @@ To extract return keys from your Hardhat script into Starlark, you have two opti
 
 ## 🔍 Contract Verification
 
-The package supports automatic contract verification with Blockscout explorer. To verify a contract:
+The package supports automatic contract verification with Blockscout explorer. This implementation detects and extends existing hardhat.config.js files instead of overwriting them.
 
 ```python
 # Deploy a contract first
@@ -143,7 +143,7 @@ deployment_result = hardhat_pkg.script(
     plan,
     script = "scripts/deploy.js",
     network = "bloctopus",
-    return_keys = ["contractAddress"]
+    return_keys = {"contractAddress": "contractAddress"}
 )
 
 contract_address = deployment_result["extract.contractAddress"]
@@ -177,6 +177,95 @@ verification_url = ethereum_output["verification_url"]
 # Deploy and verify contracts
 hardhat = hardhat_pkg.init(plan, "github.com/your-org/your-contracts.git")
 hardhat_pkg.compile(plan)
-result = hardhat_pkg.script(plan, "scripts/deploy.js", "bloctopus", return_keys=["contractAddress"])
+result = hardhat_pkg.script(plan, "scripts/deploy.js", "bloctopus", {"contractAddress": "contractAddress"})
 hardhat_pkg.verify(plan, result["extract.contractAddress"], "bloctopus", verification_url)
+```
+
+## 🌐 Multi-Network Deployment
+
+Configure multiple networks for deployment with a single function call:
+
+```python
+# Configure multiple networks
+networks = {
+    "ethereum": {
+        "rpc_url": "http://ethereum-node:8545",
+        "chain_id": 1337,
+        "private_key": "0xprivatekey",
+        "verification_url": "http://blockscout:8050"
+    },
+    "polygon": {
+        "rpc_url": "http://polygon-node:8545",
+        "chain_id": 80001,
+        "private_key": "0xprivatekey",
+        "verification_url": "http://blockscout-polygon:8050"
+    }
+}
+
+hardhat_pkg.configure_networks(plan, networks)
+
+# Deploy to Ethereum
+ethereum_result = hardhat_pkg.script(
+    plan,
+    script = "scripts/deploy.js",
+    network = "ethereum",
+    return_keys = {"contractAddress": "contractAddress"}
+)
+
+# Deploy to Polygon
+polygon_result = hardhat_pkg.script(
+    plan,
+    script = "scripts/deploy.js",
+    network = "polygon",
+    return_keys = {"contractAddress": "contractAddress"}
+)
+```
+
+## 🤝 Contract Interaction
+
+Interact with deployed contracts directly:
+
+```python
+# Interact with a contract
+result = hardhat_pkg.interact(
+    plan,
+    contract_address = "0x123...",
+    function_name = "balanceOf",
+    network = "bloctopus",
+    params = '"0x456..."',  # Function parameters as string
+    return_keys = {"balance": "result"}  # Extract the result
+)
+
+balance = result["extract.balance"]
+```
+
+## ⛽ Gas Optimization
+
+Analyze and optimize gas usage in your contracts:
+
+```python
+# Run gas optimization on all contracts
+gas_report = hardhat_pkg.optimize_gas(plan)
+
+# Run gas optimization on a specific contract
+gas_report = hardhat_pkg.optimize_gas(plan, "contracts/MyContract.sol")
+```
+
+## 📝 Deployment Tracking
+
+Track and manage your deployments across networks:
+
+```python
+# Track a deployment
+hardhat_pkg.track_deployment(
+    plan,
+    contract_name = "MyToken",
+    contract_address = "0x123...",
+    network = "bloctopus",
+    constructor_args = ["TokenName", "TKN", "1000000000000000000000000"],
+    contract_path = "contracts/MyToken.sol:MyToken"
+)
+
+# This creates a deployment JSON file in the deployments/{network}/ directory
+# that can be used for future reference or verification
 ```
