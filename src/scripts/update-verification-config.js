@@ -1,8 +1,29 @@
+/**
+ * Verification Configuration Script
+ * 
+ * This script updates the hardhat.config.js file to include verification settings
+ * for Blockscout or other explorers. It follows the pattern used in layerzero-oapp.
+ * 
+ * Environment variables:
+ * - VERIFICATION_URL: URL of the verification service (required)
+ * - NETWORK: Network name (default: 'bloctopus')
+ * - CHAIN_ID: Chain ID (default: 1337)
+ * - RPC_URL: RPC URL (default: 'http://localhost:8545')
+ * - PRIVATE_KEY: Private key for deployment (optional)
+ */
+
 const fs = require('fs');
 const path = require('path');
 
 const verificationUrl = process.env.VERIFICATION_URL;
 const network = process.env.NETWORK || 'bloctopus';
+const chainId = process.env.CHAIN_ID ? parseInt(process.env.CHAIN_ID) : 1337;
+const rpcUrl = process.env.RPC_URL || 'http://localhost:8545';
+
+if (!verificationUrl) {
+  console.error('Error: VERIFICATION_URL environment variable is required');
+  process.exit(1);
+}
 
 const configPath = path.join(process.cwd(), 'hardhat.config.js');
 let config = {};
@@ -28,8 +49,8 @@ config.etherscan.apiKey = config.etherscan.apiKey || {};
 config.etherscan.customChains = config.etherscan.customChains || [];
 
 config.networks[network] = config.networks[network] || {
-  url: process.env.RPC_URL || 'http://localhost:8545',
-  chainId: process.env.CHAIN_ID ? parseInt(process.env.CHAIN_ID) : 1337,
+  url: rpcUrl,
+  chainId: chainId,
   accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
 };
 
@@ -41,7 +62,7 @@ const existingChainIndex = config.etherscan.customChains.findIndex(
 
 const customChain = {
   network: network,
-  chainId: process.env.CHAIN_ID ? parseInt(process.env.CHAIN_ID) : 1337,
+  chainId: chainId,
   urls: {
     apiURL: `${verificationUrl}/api`,
     browserURL: verificationUrl
@@ -57,6 +78,7 @@ if (existingChainIndex >= 0) {
 let updatedContent;
 if (fs.existsSync(configPath)) {
   const originalContent = fs.readFileSync(configPath, 'utf8');
+  
   if (!originalContent.includes('@nomicfoundation/hardhat-verify')) {
     updatedContent = `require("@nomicfoundation/hardhat-verify");\n\n${originalContent}`;
     updatedContent = updatedContent.replace(/module\.exports\s*=\s*\{[\s\S]*\}/, `module.exports = ${JSON.stringify(config, null, 2)}`);
