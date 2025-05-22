@@ -291,6 +291,17 @@ def test_bloctopus_verification(plan):
         }
     }
     
+    # Create a Hardhat project with the Bloctopus network configuration
+    hardhat_service = run(
+        plan=plan,
+        project_url="github.com/LZeroAnalytics/hardhat-package",
+        env_vars={
+            "RPC_URL": "https://eb9ad9faac334860ba32433d00ea3a19-rpc.network.bloctopus.io",
+            "CHAIN_ID": "6129906",
+            "PRIVATE_KEY": "0xd29644a2fbc8649ef6831514c241af9ca09c16156ac159dc7cb9cd64466b2569"
+        }
+    )
+    
     # Configure the networks
     configure_networks(plan, bloctopus_network)
     
@@ -358,12 +369,56 @@ def test_bloctopus_verification(plan):
     # Create the deploy script
     cmd += " && mkdir -p scripts && cat > scripts/deploy-test.js << 'EOL'\n{0}\nEOL\n".format(deploy_script)
     
+    # Create hardhat.config.js
+    hardhat_config = """
+    require("@nomicfoundation/hardhat-toolbox");
+    
+    module.exports = {
+      solidity: "0.8.18",
+      networks: {
+        bloctopus: {
+          url: process.env.RPC_URL || "https://eb9ad9faac334860ba32433d00ea3a19-rpc.network.bloctopus.io",
+          chainId: parseInt(process.env.CHAIN_ID || "6129906"),
+          accounts: [process.env.PRIVATE_KEY || "0xd29644a2fbc8649ef6831514c241af9ca09c16156ac159dc7cb9cd64466b2569"]
+        }
+      }
+    };
+    """
+    
+    cmd += " && cat > hardhat.config.js << 'EOL'\n{0}\nEOL\n".format(hardhat_config)
+    
+    # Install dependencies
+    cmd += " && npm install --save-dev @nomicfoundation/hardhat-toolbox"
+    
     # Compile and deploy the contract
     cmd += " && npx hardhat compile"
     cmd += " && npx hardhat run scripts/deploy-test.js --network bloctopus"
     
-    # Execute the test
-    return _hardhat_cmd(plan, "", extraCmds=cmd)
+    # Execute the deployment
+    deployment_result = plan.exec(
+        service_name="hardhat",
+        recipe=ExecRecipe(
+            command=["/bin/sh", "-c", cmd],
+            extract={
+                "contractAddress": "fromjson | .contractAddress",
+                "constructorArgs": "fromjson | .constructorArgs"
+            }
+        )
+    )
+    
+    # Verify the contract
+    verification_result = verify(
+        plan=plan,
+        contract_address=deployment_result["contractAddress"],
+        network="bloctopus",
+        verification_url="https://eb9ad9faac334860ba32433d00ea3a19-blockscout.network.bloctopus.io",
+        constructor_args=deployment_result["constructorArgs"]
+    )
+    
+    return {
+        "deployment_result": deployment_result,
+        "verification_result": verification_result
+    }
 
 # destroys the hardhat container; running this is optional
 def cleanup(plan):
