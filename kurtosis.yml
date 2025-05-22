@@ -16,6 +16,7 @@ description: |
   - `project_url`: URL or local path to the Hardhat project
   - `env_vars`: Environment variables to pass to the Hardhat container (optional)
   - `more_files`: Additional files to mount in the container (optional)
+  - `include_scripts`: Whether to include the utility scripts in the container (default: true)
   
   After deployment, you can use the following functions:
   - `script(plan, script, network, return_keys, params)`: Runs a Hardhat script
