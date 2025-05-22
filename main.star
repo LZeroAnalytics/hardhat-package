@@ -123,7 +123,7 @@ def verify(plan, contract_address, network="bloctopus", verification_url=None, c
     cmd += " && node scripts/update-verification-config.js"
     
     # Build the verify command
-    verify_cmd = "verify"
+    verify_cmd = "verify --force"
     if contract_path:
         verify_cmd += " --contract {0}".format(contract_path)
     
