@@ -54,17 +54,22 @@ config.networks[network] = config.networks[network] || {
   accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
 };
 
-config.etherscan.apiKey[network] = 'blockscout';
+config.etherscan.apiKey[network] = 'empty';
 
 const existingChainIndex = config.etherscan.customChains.findIndex(
   chain => chain.network === network
 );
 
+const isBlockscout = verificationUrl.includes('blockscout');
+const apiUrl = isBlockscout 
+  ? verificationUrl.replace('blockscout', 'blockscout-backend') + '/api'
+  : `${verificationUrl}/api`;
+
 const customChain = {
   network: network,
   chainId: chainId,
   urls: {
-    apiURL: `${verificationUrl}/api`,
+    apiURL: apiUrl,
     browserURL: verificationUrl
   }
 };
