@@ -22,7 +22,16 @@ SCRIPT_FILES = {
 
 # Creates a Node.js container with Hardhat project either from GitHub or local
 def run(plan, project_url, env_vars={}, more_files={}, include_scripts=True):
-    hardhat_project = plan.upload_files(src=project_url)
+    # Handle local paths vs remote URLs differently
+    if project_url.startswith("/"):
+        # For local paths, create a files artifact from the directory
+        import os
+        if not os.path.exists(project_url):
+            raise Exception(f"Local path '{project_url}' does not exist")
+        hardhat_project = plan.upload_files(src=project_url)
+    else:
+        # For remote URLs (like GitHub), use the URL directly
+        hardhat_project = plan.upload_files(src=project_url)
 
     files = {HARDHAT_PROJECT_DIR: hardhat_project}
     for filepath, file_artifact in more_files.items():
