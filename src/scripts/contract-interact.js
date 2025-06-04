@@ -2,14 +2,15 @@
  * Contract Interaction Script
  * 
  * This script interacts with a deployed contract by calling a specified function
- * with provided parameters. It follows the pattern used in layerzero-oapp for
- * contract interaction.
+ * with provided parameters and outputs the result in the format expected by main.star.
  * 
  * Environment variables:
  * - CONTRACT_ADDRESS: Address of the deployed contract (required)
  * - FUNCTION_NAME: Name of the function to call (required)
  * - FUNCTION_PARAMS: JSON string of parameters to pass to the function (optional)
  * - CONTRACT_NAME: Name of the contract ABI to use (default: "Contract")
+ * 
+ * Expected output: JSON with result, txHash, gasUsed
  */
 
 const hre = require("hardhat");
@@ -30,31 +31,31 @@ async function main() {
     process.exit(1);
   }
   
-  try {
-    const contract = await hre.ethers.getContractAt(contractName, contractAddress);
-    
-    const result = await contract[functionName](...params);
+  // Get the contract instance
+  const contract = await hre.ethers.getContractAt(contractName, contractAddress);
+  
+  // Call the function
+  const result = await contract[functionName](...params);
+  
+  // Check if this is a transaction (has wait method) or a view function
+  if (result && typeof result.wait === 'function') {
+    // It's a transaction - wait for it to be mined
+    const receipt = await result.wait();
     
     console.log(JSON.stringify({ 
-      success: true,
       result: result.toString(),
-      contractAddress,
-      functionName,
-      params
+      txHash: result.hash,
+      gasUsed: receipt.gasUsed.toString()
     }));
-  } catch (error) {
-    console.error(JSON.stringify({
-      success: false,
-      error: error.message,
-      contractAddress,
-      functionName,
-      params
+  } else {
+    // It's a view function - just return the result
+    console.log(JSON.stringify({ 
+      result: result.toString(),
+      txHash: null,
+      gasUsed: "0"
     }));
-    process.exit(1);
   }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+// Let it fail naturally - no try/catch
+main();

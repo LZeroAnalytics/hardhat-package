@@ -23,7 +23,7 @@ This Starlark module spins up a Node.js container, loads a Hardhat project (loca
 
 ```python
 # Import the module in your Kurtosis plan
-hardhat_pkg = import_module("./hardhat-package/hardhat.star")
+hardhat_pkg = import_module("./hardhat-package/main.star")
 ```
 
 ---
@@ -46,48 +46,81 @@ kurtosis run --enclave hardhat . -- '{"project_url": "github.com/LZeroAnalytics/
 - The first command logs you into GitHub for Kurtosis to access private repos.
 - The second command runs the package in a new enclave, passing the Hardhat project URL as a parameter.
 
----
 
-### 1️⃣ Deploy Contracts Example
-
-```python
-def deploy_mpc_vrf_contracts(plan, private_key, rpc_url, link_token_address, link_native_token_feed_address, key_id, network_type="ethereum"):
-    """Deploy contracts using Hardhat"""
-    hardhat = hardhat_pkg.init(
-        plan, 
-        "github.com/LZeroAnalytics/hardhat-vrf-contracts.git",
-        env_vars = {
-            "RPC_URL": rpc_url,
-            "PRIVATE_KEY": private_key,
-            "NETWORK_TYPE": network_type
-            "CHAIN_ID": chain_id
-        }
-    )
-
-    hardhat_pkg.compile(plan)
-    
-    # Deploy coordinator and get addresses
-    result = hardhat_pkg.run(
-        plan = plan,
-        script = "scripts/deploy-contracts.ts",
-        network = "bloctopus",
-        return_keys = ["contractAddress", "beaconContractAddress"]
-    )
-```
-
----
 
 ## 🧩 Function Reference
 
 | Function   | Purpose                                      |
 |------------|----------------------------------------------|
-| `init`     | Start the Hardhat container                  |
+| `run`      | Start the Hardhat container with project     |
 | `compile`  | Compile contracts                            |
-| `scripts`      | Run a Hardhat script                         |
+| `script`   | Run a Hardhat script                         |
 | `task`     | Run a Hardhat task                           |
 | `test`     | Run Hardhat tests                            |
 | `verify`   | Verify contract on Blockscout                |
+| `configure_networks` | Configure multiple networks        |
+| `interact` | Interact with deployed contracts             |
+| `optimize_gas` | Analyze gas usage                        |
 | `cleanup`  | Remove the Hardhat container                 |
+
+---
+
+### 🚀 Core Functions
+
+#### `run(plan, project_url, env_vars={}, more_files={})`
+Initializes a Hardhat environment with your project.
+
+```python
+# Basic usage
+hardhat_service = hardhat_pkg.run(plan, "github.com/your-org/your-project")
+
+# With environment variables
+hardhat_service = hardhat_pkg.run(
+    plan, 
+    "github.com/your-org/your-project",
+    env_vars = {
+        "RPC_URL": "http://ethereum:8545",
+        "PRIVATE_KEY": "0x123...",
+        "CHAIN_ID": "1337"
+    }
+)
+
+# With additional files and local contracts repo
+hardhat_service = hardhat_pkg.run(
+    plan,
+    "./contracts",
+    more_files = {
+        "/tmp/hardhat/config.json": config_artifact
+    }
+)
+```
+
+#### `script(plan, script, network="bloctopus", return_keys=None, params=None, extraCmds=None)`
+Runs a Hardhat script and optionally extracts JSON output.
+
+```python
+# Basic script execution
+result = hardhat_pkg.script(plan, "scripts/deploy.js")
+
+# With return value extraction
+result = hardhat_pkg.script(
+    plan,
+    script = "scripts/deploy.js", 
+    network = "bloctopus",
+    return_keys = {"registry": "automationRegistry"}
+)
+registry_address = result["extract.registry"]
+
+# With parameters
+result = hardhat_pkg.script(
+    plan,
+    script = "scripts/configure.js",
+    params = {
+        "REGISTRY_ADDRESS": "0x123...",
+        "NETWORK_TYPE": "ethereum"
+    }
+)
+```
 
 ---
 
@@ -99,39 +132,42 @@ To extract return keys from your Hardhat script into Starlark, you have two opti
 - Your script must print only a single JSON object to `console.log` (no other logs, prints, or errors).
 - Example:
   ```js
-  console.log(JSON.stringify({ contractAddress, beaconContractAddress }));
+  console.log(JSON.stringify({ automationRegistry, automationRegistrar }));
   ```
-- in starlark
-  ```js
+- In Starlark:
+  ```python
   result = hardhat_pkg.script(
-    plan = plan,
-    script = "scripts/deploy-contracts.ts",
-    network = "bloctopus",
-    return_keys = ["contractAddress", "beaconContractAddress"]
+      plan,
+      script = "scripts/deploy-automation-v23.js",
+      network = "bloctopus", 
+      return_keys = {"registry": "automationRegistry", "registrar": "automationRegistrar"}
   )
 
-  contract_addr = result["extract.vrfCoordinatorMPC"],
-  beacon_addr = result["extract.dkg"]
+  registry_addr = result["extract.registry"]
+  registrar_addr = result["extract.registrar"]
   ```
 
 **Option 2: Use Separators and extraCmds**
 - If you want to include other logs, you MUST wrap your JSON output with clear separators and filter it in Kurtosis using `extraCmds`:
   ```python
   result = hardhat_pkg.script(
-    ...
-    extraCmds = " | grep -A 100 OUTPUT_JSON_BEGIN | grep -B 100 OUTPUT_JSON_END"
+      plan,
+      script = "scripts/deploy.js",
+      extraCmds = " | grep -A 100 DEPLOYMENT_JSON_BEGIN | grep -B 100 DEPLOYMENT_JSON_END | sed '/DEPLOYMENT_JSON_BEGIN/d' | sed '/DEPLOYMENT_JSON_END/d'"
   )
   ```
 - In your hardhat script:
   ```js
-  console.log('some log...');
-  console.log('OUTPUT_JSON_BEGIN');
-  console.log(JSON.stringify({ contractAddress, beaconContractAddress }));
-  console.log('OUTPUT_JSON_END');
+  console.log('🤖  DEPLOYING AUTOMATION v2.3...');
+  console.log('DEPLOYMENT_JSON_BEGIN');
+  console.log(JSON.stringify({ automationRegistry, automationRegistrar }));
+  console.log('DEPLOYMENT_JSON_END');
   ```
 
 **Summary:**
 - If you want to extract return keys, you must EITHER output only JSON, OR use separators + extraCmds. Mixing logs and JSON without separators will break extraction.
+
+---
 
 ## 🔍 Contract Verification
 
@@ -149,37 +185,19 @@ deployment_result = hardhat_pkg.script(
 contract_address = deployment_result["extract.contractAddress"]
 
 # Verify the deployed contract
-hardhat_pkg.verify(
+verification_result = hardhat_pkg.verify(
     plan,
     contract_address = contract_address,
     network = "bloctopus",
-    verification_url = blockscout_output["verification_url"],  # URL from blockscout package
+    verification_url = "http://blockscout:8050",
     constructor_args = ["0x123", "argument2", "100"],  # Optional constructor arguments
-    contract_path = "contracts/MyContract.sol:MyContract"  # Optional contract path if there are multiple contracts
+    contract_path = "contracts/MyContract.sol:MyContract"  # Optional contract path
 )
+
+explorer_url = verification_result["explorer_contract_url"]
 ```
 
-### Automatic Verification Workflow
-
-When using with the ethereum-package and blockscout-package, you can create a seamless deployment and verification workflow:
-
-```python
-# Import packages
-ethereum_pkg = import_module("github.com/LZeroAnalytics/ethereum-package/main.star")
-blockscout_pkg = import_module("github.com/LZeroAnalytics/blockscout-package/main.star")
-hardhat_pkg = import_module("github.com/LZeroAnalytics/hardhat-package/main.star")
-
-# Run Ethereum network with Blockscout
-ethereum_output = ethereum_pkg.run(plan, args)
-blockscout_url = ethereum_output["blockscout_url"]
-verification_url = ethereum_output["verification_url"]
-
-# Deploy and verify contracts
-hardhat = hardhat_pkg.init(plan, "github.com/your-org/your-contracts.git")
-hardhat_pkg.compile(plan)
-result = hardhat_pkg.script(plan, "scripts/deploy.js", "bloctopus", {"contractAddress": "contractAddress"})
-hardhat_pkg.verify(plan, result["extract.contractAddress"], "bloctopus", verification_url)
-```
+---
 
 ## 🌐 Multi-Network Deployment
 
@@ -195,14 +213,14 @@ networks = {
         "verification_url": "http://blockscout:8050"
     },
     "polygon": {
-        "rpc_url": "http://polygon-node:8545",
+        "rpc_url": "http://polygon-node:8545", 
         "chain_id": 80001,
         "private_key": "0xprivatekey",
         "verification_url": "http://blockscout-polygon:8050"
     }
 }
 
-hardhat_pkg.configure_networks(plan, networks)
+network_result = hardhat_pkg.configure_networks(plan, networks)
 
 # Deploy to Ethereum
 ethereum_result = hardhat_pkg.script(
@@ -215,29 +233,64 @@ ethereum_result = hardhat_pkg.script(
 # Deploy to Polygon
 polygon_result = hardhat_pkg.script(
     plan,
-    script = "scripts/deploy.js",
+    script = "scripts/deploy.js", 
     network = "polygon",
     return_keys = {"contractAddress": "contractAddress"}
 )
 ```
+
+---
 
 ## 🤝 Contract Interaction
 
 Interact with deployed contracts directly:
 
 ```python
-# Interact with a contract
-result = hardhat_pkg.interact(
+# Call a view function (e.g., balanceOf) - default extraction
+interaction_result = hardhat_pkg.interact(
     plan,
     contract_address = "0x123...",
-    function_name = "balanceOf",
+    function_name = "balanceOf", 
     network = "bloctopus",
-    params = '"0x456..."',  # Function parameters as string
-    return_keys = {"balance": "result"}  # Extract the result
+    params = ["0x456..."]  # Function parameters as array
 )
 
-balance = result["extract.balance"]
+balance = interaction_result["return_value"]
+tx_hash = interaction_result["transaction_hash"]  # null for view functions
+gas_used = interaction_result["gas_used"]         # "0" for view functions
+
+# Call a transaction function (e.g., transfer)
+tx_result = hardhat_pkg.interact(
+    plan,
+    contract_address = "0x123...",
+    function_name = "transfer",
+    network = "bloctopus", 
+    params = ["0x456...", "1000000000000000000"]  # to, amount
+)
+
+tx_hash = tx_result["transaction_hash"]
+gas_used = tx_result["gas_used"]
+result = tx_result["return_value"]
+
+# Custom return value extraction (advanced)
+custom_result = hardhat_pkg.interact(
+    plan,
+    contract_address = "0x123...",
+    function_name = "getInfo",
+    network = "bloctopus",
+    params = [],
+    return_keys = {"info": "result", "hash": "txHash", "gas": "gasUsed"}  # Custom keys
+)
+
+info = custom_result["return_value"]      # Uses extract.info
+tx_hash = custom_result["transaction_hash"]  # Uses extract.hash  
+gas_used = custom_result["gas_used"]      # Uses extract.gas
 ```
+
+**Advanced Options:**
+- **CONTRACT_NAME**: Set `params = {"CONTRACT_NAME": "MyContract"}` if your contract has a specific name different from "Contract"
+
+---
 
 ## ⛽ Gas Optimization
 
@@ -246,26 +299,58 @@ Analyze and optimize gas usage in your contracts:
 ```python
 # Run gas optimization on all contracts
 gas_report = hardhat_pkg.optimize_gas(plan)
+print(gas_report["gas_report"])
 
 # Run gas optimization on a specific contract
 gas_report = hardhat_pkg.optimize_gas(plan, "contracts/MyContract.sol")
+print(gas_report["gas_report"])
 ```
 
-## 📝 Deployment Tracking
+---
 
-Track and manage your deployments across networks:
+## 🧪 Testing
+
+Run your Hardhat tests in the Kurtosis environment:
 
 ```python
-# Track a deployment
-hardhat_pkg.track_deployment(
-    plan,
-    contract_name = "MyToken",
-    contract_address = "0x123...",
-    network = "bloctopus",
-    constructor_args = ["TokenName", "TKN", "1000000000000000000000000"],
-    contract_path = "contracts/MyToken.sol:MyToken"
-)
+# Run all tests
+test_result = hardhat_pkg.test(plan)
 
-# This creates a deployment JSON file in the deployments/{network}/ directory
-# that can be used for future reference or verification
+# Run specific test file
+test_result = hardhat_pkg.test(plan, "test/AutomationRegistry.test.js")
+
+# Run with specific network
+test_result = hardhat_pkg.test(plan, "test/AutomationRegistry.test.js", "bloctopus")
 ```
+
+---
+
+## 🗂️ Tasks
+
+Execute custom Hardhat tasks:
+
+```python
+# Run a custom task
+task_result = hardhat_pkg.task(plan, "accounts", "bloctopus")
+
+# Run task with parameters
+task_result = hardhat_pkg.task(
+    plan, 
+    "verify-deployment",
+    "bloctopus",
+    params = {"REGISTRY_ADDRESS": "0x123..."}
+)
+```
+
+---
+
+## 🧹 Cleanup
+
+Remove the Hardhat container when done:
+
+```python
+# Clean up resources
+hardhat_pkg.cleanup(plan)
+```
+
+> **Note:** Cleanup is optional - Kurtosis will automatically clean up when the enclave is destroyed.
