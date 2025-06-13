@@ -82,7 +82,7 @@ def verify(plan, contract_address, network="bloctopus", verification_url=None, c
 
 def configure_networks(plan, networks):
     env_vars = {
-        "NETWORKS_CONFIG": json.dumps(networks)
+        "NETWORKS_CONFIG": json.encode(networks)
     }
     
     result = _hardhat_cmd(
@@ -103,7 +103,7 @@ def interact(plan, contract_address, function_name, network="bloctopus", params=
     env_vars = {
         "CONTRACT_ADDRESS": contract_address,
         "FUNCTION_NAME": function_name,
-        "FUNCTION_PARAMS": json.dumps(params) if params else "[]",
+        "FUNCTION_PARAMS": json.encode(params) if params else "[]",
         "NETWORK": network
     }
     
