@@ -1,7 +1,7 @@
 NODE_ALPINE = "node:20.14.0-alpine"
 HARDHAT_PROJECT_DIR = "/tmp/hardhat/"
 HARDHAT_SERVICE_NAME = "hardhat"
-HARDHAT_SCRIPTS_UTILS = "/tmp/hardhat-scripts-utils/"
+HARDHAT_SCRIPTS_UTILS = "/tmp/hardhat-scripts-utils"
 
 def run(plan, project_url, env_vars={}, more_files={}):
     hardhat_project = plan.upload_files(src=project_url)
@@ -156,7 +156,7 @@ def _hardhat_cmd(plan, command_str, network=None, params=None, extract_keys=None
     
     # Export environment variables
     if params:
-        cmd += " && " + " ".join(["export {0}={1}".format(k, v) for k, v in params.items()])
+        cmd += " && " + " ".join(["export {0}='{1}'".format(k, v) for k, v in params.items()])
     
     # Add prefix commands (setup, installs, etc.)
     if prefix_cmds:
