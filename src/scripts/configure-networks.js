@@ -162,12 +162,12 @@ if (fs.existsSync(configPath)) {
     // Handle both export default and module.exports patterns
     if (originalContent.includes('export default')) {
       updatedContent = originalContent.replace(
-        /export default\s*\{[\s\S]*?\}[;\s]*$/m,
+        /export default\s*\{[\s\S]*\}\s*(?:satisfies\s+[A-Za-z0-9_.]+\s*)?;?/m,
         `export default ${configJson} satisfies HardhatUserConfig;`
       );
     } else {
       updatedContent = originalContent.replace(
-        /module\.exports\s*=\s*\{[\s\S]*?\}[;\s]*$/m,
+        /module\.exports\s*=\s*\{[\s\S]*\};?/m,
         `module.exports = ${configJson};`
       );
     }
@@ -178,7 +178,7 @@ if (fs.existsSync(configPath)) {
     }
   } else {
     updatedContent = originalContent.replace(
-      /module\.exports\s*=\s*\{[\s\S]*?\}[;\s]*$/m,
+      /module\.exports\s*=\s*\{[\s\S]*\};?/m,
       `module.exports = ${configJson};`
     );
     
