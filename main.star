@@ -166,9 +166,19 @@ def _hardhat_cmd(plan, command_str, network=None, params=None, extract_keys=None
     if custom_cmd:
         cmd += " && {0}".format(custom_cmd)
     elif command_str:  # Only add hardhat command if command_str is not empty
-        cmd += " && npx hardhat {0}".format(command_str)
+        cmd += " && npx hardhat"
+        # Parse command to insert --network in the right place
         if network:
-            cmd += " --network {0}".format(network)
+            # Split command to get task name and rest
+            parts = command_str.split(' ', 1)
+            task_name = parts[0]  # e.g., "run"
+            rest = parts[1] if len(parts) > 1 else ""  # e.g., "scripts/..."
+            
+            cmd += " {0} --network {1}".format(task_name, network)
+            if rest:
+                cmd += " {0}".format(rest)
+        else:
+            cmd += " {0}".format(command_str)
     
     # Legacy extraCmds support (for backward compatibility)
     if extraCmds:
