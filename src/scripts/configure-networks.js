@@ -51,19 +51,50 @@ if (fs.existsSync(tsConfigPath)) {
 
 let config = {};
 
-if (fs.existsSync(configPath)) {
+// Function to safely extract configuration from file content
+function extractConfigFromContent(content, isTypeScript) {
   try {
-    fs.copyFileSync(configPath, configPath + '.backup');
+    // Create a temporary file to require/import and get the actual config
+    const tempFileName = `temp_config_${Date.now()}.js`;
+    const tempFilePath = path.join(process.cwd(), tempFileName);
     
-    const configContent = fs.readFileSync(configPath, 'utf8');
+    let tempContent;
+    if (isTypeScript) {
+      // Convert TypeScript to JavaScript for evaluation
+      tempContent = content
+        .replace(/import\s+.*?from\s+['"][^'"]*['"];?\s*\n?/g, '') // Remove imports
+        .replace(/import\s+['"][^'"]*['"];?\s*\n?/g, '') // Remove side-effect imports
+        .replace(/export\s+default\s+/g, 'module.exports = ') // Convert export default
+        .replace(/:\s*HardhatUserConfig/g, '') // Remove type annotations
+        .replace(/satisfies\s+HardhatUserConfig/g, '') // Remove satisfies
+        .replace(/as\s+HardhatUserConfig/g, ''); // Remove as clauses
+    } else {
+      // For JavaScript files, we need to handle requires
+      tempContent = content
+        .replace(/require\s*\(\s*['"][^'"]*['"]\s*\);?\s*\n?/g, ''); // Remove requires for parsing
+    }
     
-    // For TypeScript, we need to handle different export patterns
+    // Write temporary file and require it
+    fs.writeFileSync(tempFilePath, tempContent);
+    
+    // Clear require cache and require the temp file
+    delete require.cache[path.resolve(tempFilePath)];
+    const loadedConfig = require(path.resolve(tempFilePath));
+    
+    // Clean up temp file
+    fs.unlinkSync(tempFilePath);
+    
+    return loadedConfig || {};
+  } catch (error) {
+    console.warn('Could not parse existing config using safer method, attempting fallback parsing');
+    
+    // Fallback to regex-based parsing
     let moduleExportsMatch;
     if (isTypeScript) {
       // Handle both export default and module.exports patterns
-      moduleExportsMatch = configContent.match(/(?:export default|module\.exports\s*=)\s*(\{[\s\S]*\})/);
+      moduleExportsMatch = content.match(/(?:export default|module\.exports\s*=)\s*(\{[\s\S]*\})/);
     } else {
-      moduleExportsMatch = configContent.match(/module\.exports\s*=\s*(\{[\s\S]*\})/);
+      moduleExportsMatch = content.match(/module\.exports\s*=\s*(\{[\s\S]*\})/);
     }
     
     if (moduleExportsMatch) {
@@ -74,19 +105,35 @@ if (fs.existsSync(configPath)) {
         // Handle TypeScript specific syntax - remove type annotations
         configString = configString.replace(/:\s*HardhatUserConfig/g, '');
         configString = configString.replace(/as\s+HardhatUserConfig/g, '');
+        configString = configString.replace(/satisfies\s+HardhatUserConfig/g, '');
         
         // Simple evaluation for basic config objects
         const configObject = eval('(' + configString + ')');
-        config = configObject;
+        return configObject || {};
       } catch (evalError) {
-        console.warn('Could not parse existing config, creating new one');
+        console.warn('Could not parse existing config with fallback method either, creating new config');
+        return {};
       }
     }
+    
+    return {};
+  }
+}
+
+if (fs.existsSync(configPath)) {
+  try {
+    fs.copyFileSync(configPath, configPath + '.backup');
+    
+    const configContent = fs.readFileSync(configPath, 'utf8');
+    config = extractConfigFromContent(configContent, isTypeScript);
+    
+    console.log('Successfully parsed existing config. Preserving:', Object.keys(config).join(', '));
   } catch (error) {
     console.error('Error reading existing hardhat config:', error);
   }
 }
 
+// Ensure required sections exist, preserving existing ones
 config.networks = config.networks || {};
 config.etherscan = config.etherscan || {};
 config.etherscan.apiKey = config.etherscan.apiKey || {};
@@ -166,8 +213,9 @@ if (fs.existsSync(configPath)) {
         `export default ${configJson} satisfies HardhatUserConfig;`
       );
     } else {
+      // Handle both direct object exports and variable exports
       updatedContent = originalContent.replace(
-        /module\.exports\s*=\s*\{[\s\S]*\};?/m,
+        /module\.exports\s*=\s*(?:\{[\s\S]*\}|[^;]+);?/m,
         `module.exports = ${configJson};`
       );
     }
@@ -177,8 +225,9 @@ if (fs.existsSync(configPath)) {
       updatedContent = importsSection + updatedContent;
     }
   } else {
+    // Handle both direct object exports and variable exports
     updatedContent = originalContent.replace(
-      /module\.exports\s*=\s*\{[\s\S]*\};?/m,
+      /module\.exports\s*=\s*(?:\{[\s\S]*\}|[^;]+);?/m,
       `module.exports = ${configJson};`
     );
     
@@ -205,4 +254,5 @@ export default config;
 }
 
 fs.writeFileSync(configPath, updatedContent);
-console.log(`Hardhat config updated with multiple networks (${isTypeScript ? 'TypeScript' : 'JavaScript'})`);
+console.log(`Hardhat config updated with ${Object.keys(networks).length} networks (${isTypeScript ? 'TypeScript' : 'JavaScript'})`);
+console.log('Preserved config sections:', Object.keys(config).filter(key => key !== 'networks' && key !== 'etherscan').join(', '));
