@@ -53,25 +53,55 @@ let config = {};
 
 // Function to safely extract configuration from file content
 function extractConfigFromContent(content, isTypeScript) {
+  // First try: Enhanced parsing with improved cleanup
   try {
-    // Create a temporary file to require/import and get the actual config
     const tempFileName = `temp_config_${Date.now()}.js`;
     const tempFilePath = path.join(process.cwd(), tempFileName);
     
     let tempContent;
     if (isTypeScript) {
-      // Convert TypeScript to JavaScript for evaluation
+      // Convert TypeScript to JavaScript for evaluation with comprehensive cleanup
       tempContent = content
-        .replace(/import\s+.*?from\s+['"][^'"]*['"];?\s*\n?/g, '') // Remove imports
-        .replace(/import\s+['"][^'"]*['"];?\s*\n?/g, '') // Remove side-effect imports
-        .replace(/export\s+default\s+/g, 'module.exports = ') // Convert export default
-        .replace(/:\s*HardhatUserConfig/g, '') // Remove type annotations
-        .replace(/satisfies\s+HardhatUserConfig/g, '') // Remove satisfies
-        .replace(/as\s+HardhatUserConfig/g, ''); // Remove as clauses
+        // Remove all import statements (comprehensive patterns)
+        .replace(/import\s+\{[^}]*\}\s+from\s+['"][^'"]*['"];?\s*\n?/g, '') // Named imports
+        .replace(/import\s+\*\s+as\s+\w+\s+from\s+['"][^'"]*['"];?\s*\n?/g, '') // Namespace imports
+        .replace(/import\s+\w+\s+from\s+['"][^'"]*['"];?\s*\n?/g, '') // Default imports
+        .replace(/import\s+['"][^'"]*['"];?\s*\n?/g, '') // Side-effect imports
+        .replace(/import\s+.*?from\s+['"][^'"]*['"];?\s*\n?/g, '') // Any other imports
+        
+        // Convert export to module.exports
+        .replace(/export\s+default\s+/g, 'module.exports = ')
+        
+        // Remove TypeScript annotations
+        .replace(/:\s*HardhatUserConfig/g, '')
+        .replace(/satisfies\s+HardhatUserConfig/g, '')
+        .replace(/as\s+HardhatUserConfig/g, '')
+        
+        // Remove problematic function calls that reference undefined variables
+        .replace(/dotenv\.config\(\);?\s*\n?/g, '') // Remove dotenv.config()
+        .replace(/[a-zA-Z_$][a-zA-Z0-9_$]*\.config\(\);?\s*\n?/g, '') // Remove any .config() calls
+        
+        // Remove comments that might contain problematic code
+        .replace(/\/\/.*$/gm, '') // Single line comments
+        .replace(/\/\*[\s\S]*?\*\//g, '') // Multi-line comments
+        
+        // Clean up any remaining semicolons and extra whitespace
+        .replace(/^\s*\n/gm, '') // Remove empty lines
+        .trim();
     } else {
-      // For JavaScript files, we need to handle requires
+      // For JavaScript files
       tempContent = content
-        .replace(/require\s*\(\s*['"][^'"]*['"]\s*\);?\s*\n?/g, ''); // Remove requires for parsing
+        .replace(/require\s*\(\s*['"][^'"]*['"]\s*\);?\s*\n?/g, '') // Remove requires
+        .replace(/\/\/.*$/gm, '') // Remove comments
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .trim();
+    }
+    
+    console.log('Attempting enhanced parsing method...');
+    
+    // Validate that we have a valid config structure before writing temp file
+    if (!tempContent.includes('module.exports =') || !tempContent.includes('{')) {
+      throw new Error('Converted content does not contain valid module.exports structure');
     }
     
     // Write temporary file and require it
@@ -84,39 +114,137 @@ function extractConfigFromContent(content, isTypeScript) {
     // Clean up temp file
     fs.unlinkSync(tempFilePath);
     
-    return loadedConfig || {};
-  } catch (error) {
-    console.warn('Could not parse existing config using safer method, attempting fallback parsing');
-    
-    // Fallback to regex-based parsing
-    let moduleExportsMatch;
-    if (isTypeScript) {
-      // Handle both export default and module.exports patterns
-      moduleExportsMatch = content.match(/(?:export default|module\.exports\s*=)\s*(\{[\s\S]*\})/);
-    } else {
-      moduleExportsMatch = content.match(/module\.exports\s*=\s*(\{[\s\S]*\})/);
+    // Validate that we got a proper config object
+    if (!loadedConfig || typeof loadedConfig !== 'object') {
+      throw new Error('Loaded config is not a valid object');
     }
     
-    if (moduleExportsMatch) {
-      try {
-        // Clean the config string for evaluation
-        let configString = moduleExportsMatch[1];
+    console.log('Enhanced parsing successful!');
+    return loadedConfig;
+    
+  } catch (error) {
+    console.log('Enhanced parsing failed:', error.message);
+    console.log('Attempting improved regex parsing...');
+    
+    // Second try: Improved regex-based parsing specifically for your config structure
+    try {
+      let configMatch;
+      
+      if (isTypeScript) {
+        // More comprehensive regex for TypeScript export default patterns
+        configMatch = content.match(/export\s+default\s+(\{[\s\S]*?\})\s*(?:satisfies\s+HardhatUserConfig)?\s*;?/);
         
-        // Handle TypeScript specific syntax - remove type annotations
-        configString = configString.replace(/:\s*HardhatUserConfig/g, '');
-        configString = configString.replace(/as\s+HardhatUserConfig/g, '');
-        configString = configString.replace(/satisfies\s+HardhatUserConfig/g, '');
+        if (!configMatch) {
+          // Try alternative patterns
+          configMatch = content.match(/module\.exports\s*=\s*(\{[\s\S]*?\})\s*;?/);
+        }
+      } else {
+        configMatch = content.match(/module\.exports\s*=\s*(\{[\s\S]*?\})\s*;?/);
+      }
+      
+      if (configMatch) {
+        let configString = configMatch[1];
         
-        // Simple evaluation for basic config objects
-        const configObject = eval('(' + configString + ')');
-        return configObject || {};
-      } catch (evalError) {
-        console.warn('Could not parse existing config with fallback method either, creating new config');
+        // Clean the config string more thoroughly
+        configString = configString
+          .replace(/:\s*HardhatUserConfig/g, '') // Remove type annotations
+          .replace(/as\s+HardhatUserConfig/g, '') // Remove as clauses
+          .replace(/satisfies\s+HardhatUserConfig/g, '') // Remove satisfies
+          .replace(/\/\/.*$/gm, '') // Remove single line comments
+          .replace(/\/\*[\s\S]*?\*\//g, '') // Remove multi-line comments
+          .trim();
+        
+        console.log('Evaluating config string with regex method...');
+        
+        // Create a safer evaluation environment
+        const configObject = (function() {
+          'use strict';
+          return eval('(' + configString + ')');
+        })();
+        
+        if (configObject && typeof configObject === 'object') {
+          console.log('Regex parsing successful!');
+          return configObject;
+        }
+      }
+      
+      throw new Error('No valid config pattern found');
+      
+    } catch (evalError) {
+      console.log('Regex parsing also failed:', evalError.message);
+      
+             // Third try: Manual parsing for your specific structure
+       console.log('Attempting manual parsing for known structure...');
+       
+       try {
+         const manualConfig = {};
+         
+         // More robust parsing using bracket counting for nested objects
+         function extractSectionWithBrackets(content, sectionName) {
+           const sectionRegex = new RegExp(`["']?${sectionName}["']?\\s*:\\s*\\{`);
+           const match = content.match(sectionRegex);
+           if (!match) return null;
+           
+           const startIndex = match.index + match[0].length - 1; // Position of opening {
+           let bracketCount = 0;
+           let endIndex = startIndex;
+           
+           for (let i = startIndex; i < content.length; i++) {
+             if (content[i] === '{') bracketCount++;
+             if (content[i] === '}') bracketCount--;
+             if (bracketCount === 0) {
+               endIndex = i;
+               break;
+             }
+           }
+           
+           return content.substring(startIndex, endIndex + 1);
+         }
+         
+         // Extract each section with proper bracket matching
+         const soliditySection = extractSectionWithBrackets(content, 'solidity');
+         const networksSection = extractSectionWithBrackets(content, 'networks');
+         const etherscanSection = extractSectionWithBrackets(content, 'etherscan');
+         
+         if (soliditySection) {
+           try {
+             manualConfig.solidity = eval('(' + soliditySection + ')');
+             console.log('✅ Solidity section parsed successfully');
+           } catch (e) {
+             console.log('❌ Could not parse solidity section:', e.message);
+           }
+         }
+         
+         if (networksSection) {
+           try {
+             manualConfig.networks = eval('(' + networksSection + ')');
+             console.log('✅ Networks section parsed successfully');
+           } catch (e) {
+             console.log('❌ Could not parse networks section:', e.message);
+           }
+         }
+         
+         if (etherscanSection) {
+           try {
+             manualConfig.etherscan = eval('(' + etherscanSection + ')');
+             console.log('✅ Etherscan section parsed successfully');
+           } catch (e) {
+             console.log('❌ Could not parse etherscan section:', e.message);
+           }
+         }
+         
+         if (Object.keys(manualConfig).length > 0) {
+           console.log('Manual parsing successful! Extracted sections:', Object.keys(manualConfig));
+           return manualConfig;
+         }
+        
+        throw new Error('Manual parsing failed');
+        
+      } catch (manualError) {
+        console.warn('All parsing methods failed. Creating new config. Error:', manualError.message);
         return {};
       }
     }
-    
-    return {};
   }
 }
 
