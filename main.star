@@ -170,7 +170,7 @@ def _hardhat_cmd(plan, command_str, network=None, params=None, extract_keys=None
     if custom_cmd:
         cmd += " && {0}".format(custom_cmd)
     elif command_str:  # Only add hardhat command if command_str is not empty
-        cmd += " && npx hardhat"
+        cmd += " && npx --silent hardhat"
         # Parse command to insert --network in the right place
         if network:
             # Split command to get task name and rest
