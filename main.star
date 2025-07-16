@@ -3,10 +3,12 @@ HARDHAT_PROJECT_DIR = "/tmp/hardhat/"
 HARDHAT_SERVICE_NAME = "hardhat"
 HARDHAT_SCRIPTS_UTILS = "/tmp/hardhat-scripts-utils"
 
-def run(plan, project_url, env_vars={}, more_files={}):
-    hardhat_project = plan.upload_files(src=project_url)
+def run(plan, project_url=None, env_vars={}, more_files={}, image=None):
+    files = {}
+    if project_url:
+        hardhat_project = plan.upload_files(src=project_url)
+        files = {HARDHAT_PROJECT_DIR: hardhat_project}
 
-    files = {HARDHAT_PROJECT_DIR: hardhat_project}
     for filepath, file_artifact in more_files.items():
         files[filepath] = file_artifact
     # Mount utility scripts in separate directory to avoid conflicts with project
@@ -16,19 +18,21 @@ def run(plan, project_url, env_vars={}, more_files={}):
     hardhat_service = plan.add_service(
         name = "hardhat",
         config = ServiceConfig(
-            image = NODE_ALPINE,
+            image = image if image else NODE_ALPINE,
             files = files,
             env_vars = env_vars,
             entrypoint = ["tail", "-f", "/dev/null"]
         )
     )
 
-    plan.exec(
-        service_name = "hardhat",
-        recipe = ExecRecipe(
-            command = ["/bin/sh", "-c", "npm install -g pnpm && cd {0} && pnpm install --shamefully-hoist".format(HARDHAT_PROJECT_DIR)]
+    # Skip install for prebuilt images
+    if (project_url) and (image == None):
+        plan.exec(
+            service_name = "hardhat",
+            recipe = ExecRecipe(
+                command = ["/bin/sh", "-c", "npm install -g pnpm && cd {0} && pnpm install --shamefully-hoist".format(HARDHAT_PROJECT_DIR)]
+            )
         )
-    )
 
     return hardhat_service
 
